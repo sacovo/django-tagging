@@ -17,7 +17,8 @@ if DATABASE_ENGINE == 'postgres':
             'ENGINE': 'django.db.backends.postgresql_psycopg2',
             'NAME': 'tagging',
             'USER': 'postgres',
-            'HOST': 'localhost'
+            'PASSWORD': 'postgres',
+            'HOST': 'postgres'
         }
     }
 elif DATABASE_ENGINE == 'mysql':
