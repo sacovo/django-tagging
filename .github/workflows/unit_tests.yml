@@ -27,3 +27,8 @@ jobs:
 
       - name: Run flake8
         run: tox -e flake8
+
+      - name: Run coverage
+        run: tox -e coveralls
+        env:
+            COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
