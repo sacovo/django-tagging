@@ -1,0 +1,36 @@
+name: Integration tests
+on: push
+
+jobs:
+  container-job:
+    runs-on: ubuntu-latest
+    container: python:3.9-slim
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tagging
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+
+      - name: Install dependencies
+        run: pip install setuptools zc.buildout psycopg2-binary
+
+      - name: Build library
+        run: buildout
+
+      - name: Run Postgresql tests
+        run: bin/test-and-cover
+        env:
+          DATABASE_ENGINE: postgres
