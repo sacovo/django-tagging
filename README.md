@@ -1,6 +1,7 @@
 # Django Tagging
 
 [![UnitTests](https://github.com/bartsanchez/django-tagging/actions/workflows/unit_tests.yml/badge.svg)](https://github.com/bartsanchez/django-tagging/actions/workflows/unit_tests.yml)
+[![Integration tests](https://github.com/bartsanchez/django-tagging/actions/workflows/integration_tests.yml/badge.svg)](https://github.com/bartsanchez/django-tagging/actions/workflows/integration_tests.yml)
 [![Coverage Status](https://coveralls.io/repos/github/bartsanchez/django-tagging/badge.svg?branch=feature/add_tox_configuration)](https://coveralls.io/github/bartsanchez/django-tagging?branch=feature/add_tox_configuration)
 
 This is a generic tagging application for Django projects
