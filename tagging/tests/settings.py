@@ -25,9 +25,10 @@ elif DATABASE_ENGINE == 'mysql':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': 'zinnia',
+            'NAME': 'tagging',
             'USER': 'root',
-            'HOST': 'localhost',
+            'PASSWORD': 'mysql',
+            'HOST': 'mysql',
             'TEST': {
                 'COLLATION': 'utf8_general_ci'
             }
