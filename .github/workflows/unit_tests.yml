@@ -9,6 +9,10 @@ jobs:
     strategy:
       matrix:
         python: [3.7, 3.8, 3.9]
+        django_version: [22, 30, 40]
+        exclude:
+          - python: 3.7
+            django_version: 40
 
     steps:
       - uses: actions/checkout@v2
@@ -23,7 +27,7 @@ jobs:
 
       - name: Run unit tests
         # Run tox using the version of Python in `PATH`
-        run: tox -e py
+        run: tox -e py-django${{ matrix.django_version }}
 
       - name: Run flake8
         run: tox -e flake8
