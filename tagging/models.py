@@ -3,19 +3,20 @@ Models and managers for tagging.
 """
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.db import connection
-from django.db import models
+from django.core.exceptions import FullResultSet
+from django.db import connection, models
 from django.db.models.query_utils import Q
 from django.utils.encoding import smart_str
 from django.utils.translation import gettext_lazy as _
 
 from tagging import settings
-from tagging.utils import LOGARITHMIC
-from tagging.utils import calculate_cloud
-from tagging.utils import get_queryset_and_model
-from tagging.utils import get_tag_list
-from tagging.utils import parse_tag_input
-
+from tagging.utils import (
+    LOGARITHMIC,
+    calculate_cloud,
+    get_queryset_and_model,
+    get_tag_list,
+    parse_tag_input,
+)
 
 qn = connection.ops.quote_name
 
@@ -24,27 +25,28 @@ qn = connection.ops.quote_name
 # Managers #
 ############
 
-class TagManager(models.Manager):
 
+class TagManager(models.Manager):
     def update_tags(self, obj, tag_names):
         """
         Update tags associated with an object.
         """
         ctype = ContentType.objects.get_for_model(obj)
-        current_tags = list(self.filter(items__content_type__pk=ctype.pk,
-                                        items__object_id=obj.pk))
+        current_tags = list(
+            self.filter(items__content_type__pk=ctype.pk, items__object_id=obj.pk)
+        )
         updated_tag_names = parse_tag_input(tag_names)
         if settings.FORCE_LOWERCASE_TAGS:
             updated_tag_names = [t.lower() for t in updated_tag_names]
 
         # Remove tags which no longer apply
-        tags_for_removal = [tag for tag in current_tags
-                            if tag.name not in updated_tag_names]
+        tags_for_removal = [
+            tag for tag in current_tags if tag.name not in updated_tag_names
+        ]
         if len(tags_for_removal):
             TaggedItem._default_manager.filter(
-                content_type__pk=ctype.pk,
-                object_id=obj.pk,
-                tag__in=tags_for_removal).delete()
+                content_type__pk=ctype.pk, object_id=obj.pk, tag__in=tags_for_removal
+            ).delete()
         # Add new tags
         current_tag_names = [tag.name for tag in current_tags]
         for tag_name in updated_tag_names:
@@ -62,18 +64,17 @@ class TagManager(models.Manager):
         """
         tag_names = parse_tag_input(tag_name)
         if not len(tag_names):
-            raise AttributeError(
-                _('No tags were given: "%s".') % tag_name)
+            raise AttributeError(_('No tags were given: "%s".') % tag_name)
         if len(tag_names) > 1:
-            raise AttributeError(
-                _('Multiple tags were given: "%s".') % tag_name)
+            raise AttributeError(_('Multiple tags were given: "%s".') % tag_name)
         tag_name = tag_names[0]
         if settings.FORCE_LOWERCASE_TAGS:
             tag_name = tag_name.lower()
         tag, created = self.get_or_create(name=tag_name)
         ctype = ContentType.objects.get_for_model(obj)
         TaggedItem._default_manager.get_or_create(
-            tag=tag, content_type=ctype, object_id=obj.pk)
+            tag=tag, content_type=ctype, object_id=obj.pk
+        )
 
     def get_for_object(self, obj):
         """
@@ -81,11 +82,17 @@ class TagManager(models.Manager):
         object.
         """
         ctype = ContentType.objects.get_for_model(obj)
-        return self.filter(items__content_type__pk=ctype.pk,
-                           items__object_id=obj.pk)
+        return self.filter(items__content_type__pk=ctype.pk, items__object_id=obj.pk)
 
-    def _get_usage(self, model, counts=False, min_count=None,
-                   extra_joins=None, extra_criteria=None, params=None):
+    def _get_usage(
+        self,
+        model,
+        counts=False,
+        min_count=None,
+        extra_joins=None,
+        extra_criteria=None,
+        params=None,
+    ):
         """
         Perform the custom SQL query for ``usage_for_model`` and
         ``usage_for_queryset``.
@@ -94,7 +101,7 @@ class TagManager(models.Manager):
             counts = True
 
         model_table = qn(model._meta.db_table)
-        model_pk = '%s.%s' % (model_table, qn(model._meta.pk.column))
+        model_pk = "%s.%s" % (model_table, qn(model._meta.pk.column))
         query = """
         SELECT DISTINCT %(tag)s.id, %(tag)s.name%(count_sql)s
         FROM
@@ -109,22 +116,21 @@ class TagManager(models.Manager):
         GROUP BY %(tag)s.id, %(tag)s.name
         %%s
         ORDER BY %(tag)s.name ASC""" % {
-            'tag': qn(self.model._meta.db_table),
-            'count_sql': counts and (', COUNT(%s)' % model_pk) or '',
-            'tagged_item': qn(TaggedItem._meta.db_table),
-            'model': model_table,
-            'model_pk': model_pk,
-            'content_type_id': ContentType.objects.get_for_model(model).pk,
+            "tag": qn(self.model._meta.db_table),
+            "count_sql": counts and (", COUNT(%s)" % model_pk) or "",
+            "tagged_item": qn(TaggedItem._meta.db_table),
+            "model": model_table,
+            "model_pk": model_pk,
+            "content_type_id": ContentType.objects.get_for_model(model).pk,
         }
 
-        min_count_sql = ''
+        min_count_sql = ""
         if min_count is not None:
-            min_count_sql = 'HAVING COUNT(%s) >= %%s' % model_pk
+            min_count_sql = "HAVING COUNT(%s) >= %%s" % model_pk
             params.append(min_count)
 
         cursor = connection.cursor()
-        cursor.execute(query % (extra_joins, extra_criteria, min_count_sql),
-                       params)
+        cursor.execute(query % (extra_joins, extra_criteria, min_count_sql), params)
         tags = []
         for row in cursor.fetchall():
             t = self.model(*row[:2])
@@ -133,8 +139,7 @@ class TagManager(models.Manager):
             tags.append(t)
         return tags
 
-    def usage_for_model(self, model, counts=False, min_count=None,
-                        filters=None):
+    def usage_for_model(self, model, counts=False, min_count=None, filters=None):
         """
         Obtain a list of tags associated with instances of the given
         Model class.
@@ -177,15 +182,20 @@ class TagManager(models.Manager):
         Passing a value for ``min_count`` implies ``counts=True``.
         """
         compiler = queryset.query.get_compiler(using=queryset.db)
-        where, params = compiler.compile(queryset.query.where)
-        extra_joins = ' '.join(compiler.get_from_clause()[0][1:])
+        try:
+            where, params = compiler.compile(queryset.query.where)
+        except FullResultSet:
+            where, params = "", []
+
+        extra_joins = " ".join(compiler.get_from_clause()[0][1:])
 
         if where:
-            extra_criteria = 'AND %s' % where
+            extra_criteria = "AND %s" % where
         else:
-            extra_criteria = ''
-        return self._get_usage(queryset.model, counts, min_count,
-                               extra_joins, extra_criteria, params)
+            extra_criteria = ""
+        return self._get_usage(
+            queryset.model, counts, min_count, extra_joins, extra_criteria, params
+        )
 
     def related_for_model(self, tags, model, counts=False, min_count=None):
         """
@@ -225,15 +235,15 @@ class TagManager(models.Manager):
         GROUP BY %(tag)s.id, %(tag)s.name
         %(min_count_sql)s
         ORDER BY %(tag)s.name ASC""" % {
-            'tag': qn(self.model._meta.db_table),
-            'count_sql': counts and ', COUNT(%s.object_id)' %
-                tagged_item_table or '',
-            'tagged_item': tagged_item_table,
-            'content_type_id': ContentType.objects.get_for_model(model).pk,
-            'tag_id_placeholders': ','.join(['%s'] * tag_count),
-            'tag_count': tag_count,
-            'min_count_sql': min_count is not None and (
-                'HAVING COUNT(%s.object_id) >= %%s' % tagged_item_table) or '',
+            "tag": qn(self.model._meta.db_table),
+            "count_sql": counts and ", COUNT(%s.object_id)" % tagged_item_table or "",
+            "tagged_item": tagged_item_table,
+            "content_type_id": ContentType.objects.get_for_model(model).pk,
+            "tag_id_placeholders": ",".join(["%s"] * tag_count),
+            "tag_count": tag_count,
+            "min_count_sql": min_count is not None
+            and ("HAVING COUNT(%s.object_id) >= %%s" % tagged_item_table)
+            or "",
         }
 
         params = [tag.pk for tag in tags] * 2
@@ -250,8 +260,9 @@ class TagManager(models.Manager):
             related.append(tag)
         return related
 
-    def cloud_for_model(self, model, steps=4, distribution=LOGARITHMIC,
-                        filters=None, min_count=None):
+    def cloud_for_model(
+        self, model, steps=4, distribution=LOGARITHMIC, filters=None, min_count=None
+    ):
         """
         Obtain a list of tags associated with instances of the given
         Model, giving each tag a ``count`` attribute indicating how
@@ -275,8 +286,11 @@ class TagManager(models.Manager):
         ``count`` greater than or equal to ``min_count``, pass a value
         for the ``min_count`` argument.
         """
-        tags = list(self.usage_for_model(model, counts=True, filters=filters,
-                                         min_count=min_count))
+        tags = list(
+            self.usage_for_model(
+                model, counts=True, filters=filters, min_count=min_count
+            )
+        )
         return calculate_cloud(tags, steps, distribution)
 
 
@@ -319,11 +333,14 @@ class TaggedItemManager(models.Manager):
         return queryset.extra(
             tables=[opts.db_table],
             where=[
-                '%s.content_type_id = %%s' % tagged_item_table,
-                '%s.tag_id = %%s' % tagged_item_table,
-                '%s.%s = %s.object_id' % (qn(model._meta.db_table),
-                                          qn(model._meta.pk.column),
-                                          tagged_item_table)
+                "%s.content_type_id = %%s" % tagged_item_table,
+                "%s.tag_id = %%s" % tagged_item_table,
+                "%s.%s = %s.object_id"
+                % (
+                    qn(model._meta.db_table),
+                    qn(model._meta.pk.column),
+                    tagged_item_table,
+                ),
             ],
             params=[content_type.pk, tag.pk],
         )
@@ -351,12 +368,12 @@ class TaggedItemManager(models.Manager):
           AND %(model_pk)s = %(tagged_item)s.object_id
         GROUP BY %(model_pk)s
         HAVING COUNT(%(model_pk)s) = %(tag_count)s""" % {
-            'model_pk': '%s.%s' % (model_table, qn(model._meta.pk.column)),
-            'model': model_table,
-            'tagged_item': qn(self.model._meta.db_table),
-            'content_type_id': ContentType.objects.get_for_model(model).pk,
-            'tag_id_placeholders': ','.join(['%s'] * tag_count),
-            'tag_count': tag_count,
+            "model_pk": "%s.%s" % (model_table, qn(model._meta.pk.column)),
+            "model": model_table,
+            "tagged_item": qn(self.model._meta.db_table),
+            "content_type_id": ContentType.objects.get_for_model(model).pk,
+            "tag_id_placeholders": ",".join(["%s"] * tag_count),
+            "tag_count": tag_count,
         }
 
         cursor = connection.cursor()
@@ -389,11 +406,11 @@ class TaggedItemManager(models.Manager):
           AND %(tagged_item)s.tag_id IN (%(tag_id_placeholders)s)
           AND %(model_pk)s = %(tagged_item)s.object_id
         GROUP BY %(model_pk)s""" % {
-            'model_pk': '%s.%s' % (model_table, qn(model._meta.pk.column)),
-            'model': model_table,
-            'tagged_item': qn(self.model._meta.db_table),
-            'content_type_id': ContentType.objects.get_for_model(model).pk,
-            'tag_id_placeholders': ','.join(['%s'] * tag_count),
+            "model_pk": "%s.%s" % (model_table, qn(model._meta.pk.column)),
+            "model": model_table,
+            "tagged_item": qn(self.model._meta.db_table),
+            "content_type_id": ContentType.objects.get_for_model(model).pk,
+            "tag_id_placeholders": ",".join(["%s"] * tag_count),
         }
 
         cursor = connection.cursor()
@@ -436,19 +453,20 @@ class TaggedItemManager(models.Manager):
         GROUP BY %(model_pk)s
         ORDER BY %(count)s DESC
         %(limit_offset)s"""
-        tagging_table = qn(self.model._meta.get_field(
-            'tag').remote_field.model._meta.db_table)
+        tagging_table = qn(
+            self.model._meta.get_field("tag").remote_field.model._meta.db_table
+        )
         query = query % {
-            'model_pk': '%s.%s' % (model_table, qn(model._meta.pk.column)),
-            'count': qn('count'),
-            'model': model_table,
-            'tagged_item': qn(self.model._meta.db_table),
-            'tag': tagging_table,
-            'content_type_id': content_type.pk,
-            'related_content_type_id': related_content_type.pk,
+            "model_pk": "%s.%s" % (model_table, qn(model._meta.pk.column)),
+            "count": qn("count"),
+            "model": model_table,
+            "tagged_item": qn(self.model._meta.db_table),
+            "tag": tagging_table,
+            "content_type_id": content_type.pk,
+            "related_content_type_id": related_content_type.pk,
             # Hardcoding this for now just to get tests working again - this
             # should now be handled by the query object.
-            'limit_offset': num is not None and 'LIMIT %s' or '',
+            "limit_offset": num is not None and "LIMIT %s" or "",
         }
 
         cursor = connection.cursor()
@@ -461,8 +479,11 @@ class TaggedItemManager(models.Manager):
             # Use in_bulk here instead of an id__in lookup,
             # because id__in would clobber the ordering.
             object_dict = queryset.in_bulk(object_ids)
-            return [object_dict[object_id] for object_id in object_ids
-                    if object_id in object_dict]
+            return [
+                object_dict[object_id]
+                for object_id in object_ids
+                if object_id in object_dict
+            ]
         else:
             return []
 
@@ -471,20 +492,22 @@ class TaggedItemManager(models.Manager):
 # Models #
 ##########
 
+
 class Tag(models.Model):
     """
     A tag.
     """
+
     name = models.CharField(
-        _('name'), max_length=settings.MAX_TAG_LENGTH,
-        unique=True, db_index=True)
+        _("name"), max_length=settings.MAX_TAG_LENGTH, unique=True, db_index=True
+    )
 
     objects = TagManager()
 
     class Meta:
-        ordering = ('name',)
-        verbose_name = _('tag')
-        verbose_name_plural = _('tags')
+        ordering = ("name",)
+        verbose_name = _("tag")
+        verbose_name_plural = _("tags")
 
     def __str__(self):
         return self.name
@@ -494,31 +517,26 @@ class TaggedItem(models.Model):
     """
     Holds the relationship between a tag and the item being tagged.
     """
+
     tag = models.ForeignKey(
-        Tag,
-        verbose_name=_('tag'),
-        related_name='items',
-        on_delete=models.CASCADE)
+        Tag, verbose_name=_("tag"), related_name="items", on_delete=models.CASCADE
+    )
 
     content_type = models.ForeignKey(
-        ContentType,
-        verbose_name=_('content type'),
-        on_delete=models.CASCADE)
+        ContentType, verbose_name=_("content type"), on_delete=models.CASCADE
+    )
 
-    object_id = models.PositiveIntegerField(
-        _('object id'),
-        db_index=True)
+    object_id = models.PositiveIntegerField(_("object id"), db_index=True)
 
-    object = GenericForeignKey(
-        'content_type', 'object_id')
+    object = GenericForeignKey("content_type", "object_id")
 
     objects = TaggedItemManager()
 
     class Meta:
         # Enforce unique tag association per object
-        unique_together = (('tag', 'content_type', 'object_id'),)
-        verbose_name = _('tagged item')
-        verbose_name_plural = _('tagged items')
+        unique_together = (("tag", "content_type", "object_id"),)
+        verbose_name = _("tagged item")
+        verbose_name_plural = _("tagged items")
 
     def __str__(self):
-        return '%s [%s]' % (smart_str(self.object), smart_str(self.tag))
+        return "%s [%s]" % (smart_str(self.object), smart_str(self.tag))
